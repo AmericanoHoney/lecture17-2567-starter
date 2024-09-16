@@ -1,5 +1,6 @@
 import { zEnrollmentGetParam, zEnrollmentPostBody } from "@lib/schema";
 import { NextRequest, NextResponse } from "next/server";
+import { DB } from "@lib/DB";
 
 export const GET = async (request:NextRequest) => {
   const studentId = request.nextUrl.searchParams.get("studentId");
@@ -18,12 +19,41 @@ export const GET = async (request:NextRequest) => {
     );
   }
 
+  //search enrollments array for items with `studentId`
+  const courseNolist = [];
+  for (const enroll of DB.enrollments){
+    if (enroll.studentId === studentId) {
+      courseNolist.push(enroll.courseNo);
+    }
+  }
+
+  //given each found courseNo, search courses for items with `courseNo`
+  const courseList = [];
+  for (const courseNo of courseNolist){
+    //found : found_course = {courseNo: "261207", title: "..."}
+    //!found : found_course = undefined
+    const found_course = DB.courses.find((c)=> c.courseNo === courseNo)
+    
+    //if courseNo not found in courses, return error message
+    if(!found_course) return NextResponse.json({
+      ok : false,
+      message : `Oops, something went wrong`,
+    },{status:500})
+
+    courseList.push(found_course);
+  }
+
   return NextResponse.json({
     ok: true,
+    courseList,
   });
 };
 
 export const POST = async (request:NextRequest) => {
+  //check if `studentId` is present in DB
+  //check if `courseNo` is present in DB
+  //check if the enrollment {studentId and course} is not present in DB
+
   const body = await request.json();
   const parseResult = zEnrollmentPostBody.safeParse(body);
   if (parseResult.success === false) {
@@ -38,6 +68,25 @@ export const POST = async (request:NextRequest) => {
 
   const { studentId, courseNo } = body;
 
+  const found_student = DB.students.find((s) => s.studentId === studentId);
+  const found_course = DB.courses.find((c)=>c.courseNo === courseNo);
+
+  if (!found_student || !found_course){ return NextResponse.json({
+    ok : false,
+    message : `Student Id or Course No is not existed`,
+  },{status:400})
+  }
+
+  const found_enrollment = DB.enrollments.find((e) => e.studentId === studentId && e.courseNo === courseNo);
+  
+  if(found_enrollment){ return NextResponse.json({
+    ok : false,
+    message : `Student already enrolled that course`,
+  },{status:400})
+  }
+
+  DB.enrollments.push({studentId,courseNo});
+  
   // return NextResponse.json(
   //   {
   //     ok: false,
